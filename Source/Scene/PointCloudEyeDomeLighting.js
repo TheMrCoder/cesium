@@ -275,15 +275,15 @@ define([
         return shader;
     }
 
-    PointCloudEyeDomeLighting.prototype.update = function(frameState, commandStart, tileset) {
+    PointCloudEyeDomeLighting.prototype.update = function(frameState, commandStart, options) {
         var passes = frameState.passes;
         var isPick = (passes.pick && !passes.render);
         if (!isSupported(frameState.context) || isPick) {
             return;
         }
 
-        this._strength = tileset.pointCloudShading.eyeDomeLightingStrength;
-        this._radius = tileset.pointCloudShading.eyeDomeLightingRadius;
+        this._strength = options.eyeDomeLightingStrength;
+        this._radius = options.eyeDomeLightingRadius;
 
         var dirty = createResources(this, frameState.context);
 

@@ -7,6 +7,7 @@ define([
         defined,
         Fullscreen) {
     'use strict';
+    /*global CanvasPixelArray*/
 
     var theNavigator;
     if (typeof navigator !== 'undefined') {
@@ -204,6 +205,19 @@ define([
         return supportsImageRenderingPixelated() ? imageRenderingValueResult : undefined;
     }
 
+    var typedArrayTypes = [];
+    if (typeof ArrayBuffer !== 'undefined') {
+        typedArrayTypes.push(Int8Array, Uint8Array, Int16Array, Uint16Array, Int32Array, Uint32Array, Float32Array, Float64Array);
+
+        if (typeof Uint8ClampedArray !== 'undefined') {
+            typedArrayTypes.push(Uint8ClampedArray);
+        }
+
+        if (typeof CanvasPixelArray !== 'undefined') {
+            typedArrayTypes.push(CanvasPixelArray);
+        }
+    }
+
     /**
      * A set of functions to detect whether the current browser supports
      * various features.
@@ -228,7 +242,8 @@ define([
         supportsPointerEvents : supportsPointerEvents,
         supportsWebAssembly : supportsWebAssembly,
         supportsImageRenderingPixelated: supportsImageRenderingPixelated,
-        imageRenderingValue: imageRenderingValue
+        imageRenderingValue: imageRenderingValue,
+        typedArrayTypes: typedArrayTypes
     };
 
     /**

@@ -621,75 +621,6 @@ define([
                 }
             }
         }
-        var uniformMap = {
-            u_pointSizeAndTilesetTimeAndGeometricErrorAndDepthMultiplier : function() {
-                var scratch = scratchPointSizeAndTilesetTimeAndGeometricErrorAndDepthMultiplier;
-                scratch.x = content._attenuation ? content._maximumAttenuation : content._pointSize;
-                scratch.y = content._tileset.timeSinceLoad;
-
-                if (content._attenuation) {
-                    var geometricError = content.tile.geometricError;
-                    if (geometricError === 0) {
-                        geometricError = defined(content._baseResolution) ? content._baseResolution : content._baseResolutionApproximation;
-                    }
-                    var frustum = frameState.camera.frustum;
-                    var depthMultiplier;
-                    // Attenuation is maximumAttenuation in 2D/ortho
-                    if (frameState.mode === SceneMode.SCENE2D || frustum instanceof OrthographicFrustum) {
-                        depthMultiplier = Number.POSITIVE_INFINITY;
-                    } else {
-                        depthMultiplier = context.drawingBufferHeight / frameState.camera.frustum.sseDenominator;
-                    }
-
-                    scratch.z = geometricError * content._geometricErrorScale;
-                    scratch.w = depthMultiplier;
-                }
-
-                return scratch;
-            },
-            u_highlightColor : function() {
-                return content._highlightColor;
-            },
-            u_constantColor : function() {
-                return content._constantColor;
-            },
-            u_clippingPlanes : function() {
-                var clippingPlanes = content._tileset.clippingPlanes;
-                return (!defined(clippingPlanes) || !clippingPlanes.enabled) ? context.defaultTexture : clippingPlanes.texture;
-            },
-            u_clippingPlanesEdgeStyle : function() {
-                var clippingPlanes = content._tileset.clippingPlanes;
-                if (!defined(clippingPlanes)) {
-                    return Color.WHITE.withAlpha(0.0);
-                }
-
-                var style = Color.clone(clippingPlanes.edgeColor);
-                style.alpha = clippingPlanes.edgeWidth;
-                return style;
-            },
-            u_clippingPlanesMatrix : function() {
-                var clippingPlanes = content._tileset.clippingPlanes;
-                if (!defined(clippingPlanes)) {
-                    return Matrix4.IDENTITY;
-                }
-                return Matrix4.multiply(content._modelViewMatrix, clippingPlanes.modelMatrix, scratchClippingPlaneMatrix);
-            }
-        };
-
-        if (isQuantized || isQuantizedDraco || isOctEncodedDraco) {
-            uniformMap = combine(uniformMap, {
-                u_quantizedVolumeScaleAndOctEncodedRange : function() {
-                    var scratch = scratchQuantizedVolumeScaleAndOctEncodedRange;
-                    if (defined(content._quantizedVolumeScale)) {
-                        scratch.x = content._quantizedVolumeScale.x;
-                        scratch.y = content._quantizedVolumeScale.y;
-                        scratch.z = content._quantizedVolumeScale.z;
-                    }
-                    scratch.w = content._octEncodedRange;
-                    return scratch;
-                }
-            });
-        }
 
         var positionsVertexBuffer = Buffer.createVertexBuffer({
             context : context,
@@ -842,26 +773,10 @@ define([
             attributes : attributes
         });
 
-        var drawUniformMap = uniformMap;
-
-        if (hasBatchTable) {
-            drawUniformMap = batchTable.getUniformMapCallback()(uniformMap);
-        }
-
-        var pickUniformMap;
-
-        if (hasBatchTable) {
-            pickUniformMap = batchTable.getPickUniformMapCallback()(uniformMap);
-        } else {
+        if (!hasBatchTable) {
             content._pickId = context.createPickId({
                 primitive : content._tileset,
                 content : content
-            });
-
-            pickUniformMap = combine(uniformMap, {
-                czm_pickColor : function() {
-                    return content._pickId.color;
-                }
             });
         }
 
@@ -887,7 +802,7 @@ define([
             vertexArray : vertexArray,
             count : pointsLength,
             shaderProgram : undefined, // Updated in createShaders
-            uniformMap : drawUniformMap,
+            uniformMap : undefined, // Update in createShaders
             renderState : isTranslucent ? content._translucentRenderState : content._opaqueRenderState,
             pass : isTranslucent ? Pass.TRANSLUCENT : Pass.CESIUM_3D_TILE,
             owner : content,
@@ -903,11 +818,133 @@ define([
             vertexArray : vertexArray,
             count : pointsLength,
             shaderProgram : undefined, // Updated in createShaders
-            uniformMap : pickUniformMap,
+            uniformMap : undefined, // Updated in createShaders
             renderState : isTranslucent ? content._translucentRenderState : content._opaqueRenderState,
             pass : isTranslucent ? Pass.TRANSLUCENT : Pass.CESIUM_3D_TILE,
             owner : content
         });
+    }
+
+    function getMutableUniformFunction(mutableUniformDefinition) {
+        return function() {
+            return mutableUniformDefinition.value;
+        };
+    }
+
+    function createUniformMap(content, frameState, style) {
+        var hasStyle = defined(style);
+        var batchTable = content._batchTable;
+        var hasBatchTable = defined(batchTable);
+        var context = frameState.context;
+        var isQuantized = content._isQuantized;
+        var isQuantizedDraco = content._isQuantizedDraco;
+        var isOctEncodedDraco = content._isOctEncodedDraco;
+
+        var uniformMap = {
+            u_pointSizeAndTilesetTimeAndGeometricErrorAndDepthMultiplier : function() {
+                var scratch = scratchPointSizeAndTilesetTimeAndGeometricErrorAndDepthMultiplier;
+                scratch.x = content._attenuation ? content._maximumAttenuation : content._pointSize;
+                scratch.y = content._tileset.timeSinceLoad;
+
+                if (content._attenuation) {
+                    var geometricError = content.tile.geometricError;
+                    if (geometricError === 0) {
+                        geometricError = defined(content._baseResolution) ? content._baseResolution : content._baseResolutionApproximation;
+                    }
+                    var frustum = frameState.camera.frustum;
+                    var depthMultiplier;
+                    // Attenuation is maximumAttenuation in 2D/ortho
+                    if (frameState.mode === SceneMode.SCENE2D || frustum instanceof OrthographicFrustum) {
+                        depthMultiplier = Number.POSITIVE_INFINITY;
+                    } else {
+                        depthMultiplier = context.drawingBufferHeight / frameState.camera.frustum.sseDenominator;
+                    }
+
+                    scratch.z = geometricError * content._geometricErrorScale;
+                    scratch.w = depthMultiplier;
+                }
+
+                return scratch;
+            },
+            u_highlightColor : function() {
+                return content._highlightColor;
+            },
+            u_constantColor : function() {
+                return content._constantColor;
+            },
+            u_clippingPlanes : function() {
+                var clippingPlanes = content._tileset.clippingPlanes;
+                return (!defined(clippingPlanes) || !clippingPlanes.enabled) ? context.defaultTexture : clippingPlanes.texture;
+            },
+            u_clippingPlanesEdgeStyle : function() {
+                var clippingPlanes = content._tileset.clippingPlanes;
+                if (!defined(clippingPlanes)) {
+                    return Color.WHITE.withAlpha(0.0);
+                }
+
+                var style = Color.clone(clippingPlanes.edgeColor);
+                style.alpha = clippingPlanes.edgeWidth;
+                return style;
+            },
+            u_clippingPlanesMatrix : function() {
+                var clippingPlanes = content._tileset.clippingPlanes;
+                if (!defined(clippingPlanes)) {
+                    return Matrix4.IDENTITY;
+                }
+                return Matrix4.multiply(content._modelViewMatrix, clippingPlanes.modelMatrix, scratchClippingPlaneMatrix);
+            }
+        };
+
+        if (isQuantized || isQuantizedDraco || isOctEncodedDraco) {
+            uniformMap = combine(uniformMap, {
+                u_quantizedVolumeScaleAndOctEncodedRange : function() {
+                    var scratch = scratchQuantizedVolumeScaleAndOctEncodedRange;
+                    if (defined(content._quantizedVolumeScale)) {
+                        scratch.x = content._quantizedVolumeScale.x;
+                        scratch.y = content._quantizedVolumeScale.y;
+                        scratch.z = content._quantizedVolumeScale.z;
+                    }
+                    scratch.w = content._octEncodedRange;
+                    return scratch;
+                }
+            });
+        }
+
+        if (hasStyle) {
+            var mutables = style.mutables;
+            if (Object.keys(mutables).length > 0) {
+                var mutableUniforms = {};
+                for (var name in mutables) {
+                    if (mutables.hasOwnProperty(name)) {
+                        var mutableUniformDefinition = mutables[name];
+                        var mutableUniformName = 'u_mutable' + name;
+                        mutableUniforms[mutableUniformName] = getMutableUniformFunction(mutableUniformDefinition);
+                    }
+                }
+                uniformMap = combine(uniformMap, mutableUniforms);
+            }
+        }
+
+        var drawUniformMap = uniformMap;
+
+        if (hasBatchTable) {
+            drawUniformMap = batchTable.getUniformMapCallback()(uniformMap);
+        }
+
+        var pickUniformMap;
+
+        if (hasBatchTable) {
+            pickUniformMap = batchTable.getPickUniformMapCallback()(uniformMap);
+        } else {
+            pickUniformMap = combine(uniformMap, {
+                czm_pickColor : function() {
+                    return content._pickId.color;
+                }
+            });
+        }
+
+        content._drawCommand.uniformMap = drawUniformMap;
+        content._pickCommand.uniformMap = pickUniformMap;
     }
 
     var defaultProperties = ['POSITION', 'COLOR', 'NORMAL', 'POSITION_ABSOLUTE'];
@@ -925,6 +962,17 @@ define([
         }
     }
 
+    function getGlslType(type) {
+        switch (type) {
+            case 'Boolean': return 'bool';
+            case 'Number': return 'float';
+            case 'vec2': return 'vec2';
+            case 'vec3': return 'vec3';
+            case 'vec4': return 'vec4';
+        }
+        throw new RuntimeError('Invalid mutable type: "' + type + '"');
+    }
+
     function getVertexAttribute(vertexArray, index) {
         var numberOfAttributes = vertexArray.numberOfAttributes;
         for (var i = 0; i < numberOfAttributes; ++i) {
@@ -935,14 +983,26 @@ define([
         }
     }
 
-    function modifyStyleFunction(source) {
+    function modifyStyleFunction(source, mutables) {
+        var styleName;
+        var replaceName;
+
         // Replace occurrences of czm_tiles3d_style_DEFAULTPROPERTY
         var length = defaultProperties.length;
         for (var i = 0; i < length; ++i) {
             var property = defaultProperties[i];
-            var styleName = 'czm_tiles3d_style_' + property;
-            var replaceName = property.toLowerCase();
+            styleName = 'czm_tiles3d_style_' + property;
+            replaceName = property.toLowerCase();
             source = source.replace(new RegExp(styleName + '(\\W)', 'g'), replaceName + '$1');
+        }
+
+        // Replace occurences of czm_tiles3d_style_MUTABLENAME
+        for (var name in mutables) {
+            if (mutables.hasOwnProperty(name)) {
+                styleName = 'czm_tiles3d_style_' + name;
+                replaceName = 'u_mutable' + name;
+                source = source.replace(new RegExp(styleName + '(\\W)', 'g'), replaceName + '$1');
+            }
         }
 
         // Edit the function header to accept the point position, color, and normal
@@ -953,6 +1013,7 @@ define([
         var i;
         var name;
         var attribute;
+        var mutables;
 
         var context = frameState.context;
         var batchTable = content._batchTable;
@@ -983,6 +1044,7 @@ define([
         }
 
         if (hasStyle) {
+            mutables = style.mutables;
             var shaderState = {
                 translucent : false
             };
@@ -1006,22 +1068,25 @@ define([
 
         if (hasColorStyle) {
             getStyleableProperties(colorStyleFunction, styleableProperties);
-            colorStyleFunction = modifyStyleFunction(colorStyleFunction);
+            colorStyleFunction = modifyStyleFunction(colorStyleFunction, mutables);
         }
         if (hasShowStyle) {
             getStyleableProperties(showStyleFunction, styleableProperties);
-            showStyleFunction = modifyStyleFunction(showStyleFunction);
+            showStyleFunction = modifyStyleFunction(showStyleFunction, mutables);
         }
         if (hasPointSizeStyle) {
             getStyleableProperties(pointSizeStyleFunction, styleableProperties);
-            pointSizeStyleFunction = modifyStyleFunction(pointSizeStyleFunction);
+            pointSizeStyleFunction = modifyStyleFunction(pointSizeStyleFunction, mutables);
         }
 
         var usesColorSemantic = styleableProperties.indexOf('COLOR') >= 0;
         var usesNormalSemantic = styleableProperties.indexOf('NORMAL') >= 0;
 
         // Split default properties from user properties
-        var userProperties = styleableProperties.filter(function(property) { return defaultProperties.indexOf(property) === -1; });
+        var userProperties = styleableProperties.filter(function(property) {
+            return defaultProperties.indexOf(property) === -1 &&
+                   !(defined(mutables) && (defined(mutables[property])));
+        });
 
         if (usesNormalSemantic && !hasNormals) {
             throw new RuntimeError('Style references the NORMAL semantic but the point cloud does not have normals');
@@ -1081,6 +1146,8 @@ define([
             attributeLocations[attributeName] = attribute.location;
         }
 
+        createUniformMap(content, frameState, style);
+
         var vs = 'attribute vec3 a_position; \n' +
                  'varying vec4 v_color; \n' +
                  'uniform vec4 u_pointSizeAndTilesetTimeAndGeometricErrorAndDepthMultiplier; \n' +
@@ -1092,6 +1159,14 @@ define([
         if (attenuation) {
             vs += 'float u_geometricError; \n' +
                   'float u_depthMultiplier; \n';
+        }
+
+        for (name in mutables) {
+            if (mutables.hasOwnProperty(name)) {
+                var mutableUniformName = 'u_mutable' + name;
+                var mutableUniformDefinition = mutables[name];
+                vs += 'uniform ' + getGlslType(mutableUniformDefinition.type) + ' ' + mutableUniformName + '; \n';
+            }
         }
 
         vs += attributeDeclarations;
@@ -1400,7 +1475,6 @@ define([
 
         return promise;
     }
-
 
     function decodeDraco(content, context) {
         if (content._decodingState === DecodingState.READY) {

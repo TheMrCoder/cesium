@@ -37,7 +37,7 @@ define([
         server.appendForwardSlash();
 
         var searchEndpoint = server.getDerivedResource({
-            url: 'v0/geocode'
+            url: 'v1/geocode'
         });
 
         if (defined(accessToken)) {
